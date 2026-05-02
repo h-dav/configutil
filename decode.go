@@ -40,7 +40,7 @@ func (s *settings) setFieldValue(field reflect.Value, e entry) error {
 	case reflect.Slice:
 		return setSliceField(field, e)
 	default:
-		return &UnsupportedFieldTypeError{FieldType: field.Interface()}
+		return &UnsupportedFieldTypeError{FieldType: field.Type().String()}
 	}
 	return nil
 }
@@ -62,7 +62,7 @@ func setSliceField(field reflect.Value, e entry) error {
 		}
 		field.Set(v)
 	default:
-		return &UnsupportedFieldTypeError{FieldType: field.Interface()}
+		return &UnsupportedFieldTypeError{FieldType: field.Type().String()}
 	}
 	return nil
 }

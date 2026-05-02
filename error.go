@@ -26,7 +26,7 @@ func (e *FileTypeValidationError) Error() string {
 	return fmt.Sprintf("file extension is not a valid environment file: %q", e.Filepath)
 }
 
-func (e *FileTypeValidationError) Is(target error) bool { return target == ErrFile }
+func (e *FileTypeValidationError) Unwrap() error { return ErrFile }
 
 // OpenFileError occurs when the .env config file fails to open.
 type OpenFileError struct {
@@ -37,8 +37,7 @@ func (e *OpenFileError) Error() string {
 	return fmt.Sprintf("failed to open config file: %v", e.Err)
 }
 
-func (e *OpenFileError) Unwrap() error        { return e.Err }
-func (e *OpenFileError) Is(target error) bool { return target == ErrFile }
+func (e *OpenFileError) Unwrap() []error { return []error{e.Err, ErrFile} }
 
 // FieldConversionError occurs when a field on the config struct fails to be set.
 type FieldConversionError struct {
@@ -51,19 +50,18 @@ func (e *FieldConversionError) Error() string {
 	return fmt.Sprintf("failed to convert field %v to %v: %v", e.FieldName, e.TargetType, e.Err)
 }
 
-func (e *FieldConversionError) Unwrap() error        { return e.Err }
-func (e *FieldConversionError) Is(target error) bool { return target == ErrConversion }
+func (e *FieldConversionError) Unwrap() []error { return []error{e.Err, ErrConversion} }
 
 // UnsupportedFieldTypeError occurs when the a field type on the config struct is not compatible.
 type UnsupportedFieldTypeError struct {
-	FieldType any
+	FieldType string
 }
 
 func (e *UnsupportedFieldTypeError) Error() string {
-	return fmt.Sprintf("unsupported field type: %T", e.FieldType)
+	return fmt.Sprintf("unsupported field type: %s", e.FieldType)
 }
 
-func (e *UnsupportedFieldTypeError) Is(target error) bool { return target == ErrUnsupported }
+func (e *UnsupportedFieldTypeError) Unwrap() error { return ErrUnsupported }
 
 // InvalidConfigTypeError occurs when config is not a pointer to a struct.
 type InvalidConfigTypeError struct {
@@ -74,7 +72,7 @@ func (e *InvalidConfigTypeError) Error() string {
 	return fmt.Sprintf("output must be a pointer to a struct, got %T", e.ProvidedType)
 }
 
-func (e *InvalidConfigTypeError) Is(target error) bool { return target == ErrInvalidConfig }
+func (e *InvalidConfigTypeError) Unwrap() error { return ErrInvalidConfig }
 
 // RequiredFieldError occurs when a required field is not set in the configuration.
 type RequiredFieldError struct {
@@ -85,7 +83,7 @@ func (e *RequiredFieldError) Error() string {
 	return fmt.Sprintf("required field is not set in configuration: %v", e.FieldName)
 }
 
-func (e *RequiredFieldError) Is(target error) bool { return target == ErrRequired }
+func (e *RequiredFieldError) Unwrap() error { return ErrRequired }
 
 // ReplacementError occurs when the configuration variable being used for replacement is not set.
 type ReplacementError struct {
@@ -96,7 +94,7 @@ func (e *ReplacementError) Error() string {
 	return fmt.Sprintf("configuration variable for replacement is not set: %v", e.VariableName)
 }
 
-func (e *ReplacementError) Is(target error) bool { return target == ErrReplacement }
+func (e *ReplacementError) Unwrap() error { return ErrReplacement }
 
 // ParseError occurs when a line from the .env config file has been parsed incorrectly.
 type ParseError struct {
@@ -111,8 +109,7 @@ func (e *ParseError) Error() string {
 	return fmt.Sprintf("parse line: %v: %v", e.Line, e.Err)
 }
 
-func (e *ParseError) Unwrap() error        { return e.Err }
-func (e *ParseError) Is(target error) bool { return target == ErrParse }
+func (e *ParseError) Unwrap() []error { return []error{e.Err, ErrParse} }
 
 // FileReadError occurs when an error occurs when scanning the .env file.
 type FileReadError struct {
@@ -124,8 +121,7 @@ func (e *FileReadError) Error() string {
 	return fmt.Sprintf("reading %v: %v", e.Filepath, e.Err)
 }
 
-func (e *FileReadError) Unwrap() error        { return e.Err }
-func (e *FileReadError) Is(target error) bool { return target == ErrFile }
+func (e *FileReadError) Unwrap() []error { return []error{e.Err, ErrFile} }
 
 // MalformedTagError occurs when a config struct tag is invalid.
 type MalformedTagError struct {
@@ -140,8 +136,12 @@ func (e *MalformedTagError) Error() string {
 	return fmt.Sprintf("malformed tag %q", e.Tag)
 }
 
-func (e *MalformedTagError) Unwrap() error        { return e.Err }
-func (e *MalformedTagError) Is(target error) bool { return target == ErrTag }
+func (e *MalformedTagError) Unwrap() []error {
+	if e.Err != nil {
+		return []error{e.Err, ErrTag}
+	}
+	return []error{ErrTag}
+}
 
 // FieldError wraps an error with the name of the field that caused it.
 type FieldError struct {
@@ -170,5 +170,9 @@ func (e *MalformedDefaultError) Error() string {
 	return fmt.Sprintf("default value %q is invalid for field %q: %v", e.Default, e.FieldName, e.Err)
 }
 
-func (e *MalformedDefaultError) Unwrap() error        { return e.Err }
-func (e *MalformedDefaultError) Is(target error) bool { return target == ErrTag }
+func (e *MalformedDefaultError) Unwrap() []error {
+	if e.Err != nil {
+		return []error{e.Err, ErrTag}
+	}
+	return []error{ErrTag}
+}
