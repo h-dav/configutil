@@ -44,7 +44,7 @@ func (s fileSource) Load() (map[string]string, error) {
 func parseEnvFile(path string) (map[string]string, error) {
 	file, err := os.Open(filepath.Clean(path))
 	if err != nil {
-		return nil, &OpenFileError{Err: err}
+		return nil, &OpenFileError{Filepath: path, Err: err}
 	}
 	defer file.Close() //nolint:errcheck // read-only handle; close error is non-consequential
 

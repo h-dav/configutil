@@ -25,7 +25,7 @@ func (s *settings) walkFields(v reflect.Value, prefix string) error {
 		}
 
 		if err := s.handleField(field, fieldVal, prefix); err != nil {
-			return &FieldError{FieldName: field.Name, Err: err}
+			return err
 		}
 	}
 	return nil
@@ -52,7 +52,7 @@ func (s *settings) handleField(field reflect.StructField, value reflect.Value, p
 			if err != nil {
 				return err
 			}
-			if err := s.setFieldValue(value, entry{key: key, value: resolved}); err != nil {
+			if err := s.setFieldValue(value, entry{key: key, value: resolved, fieldName: field.Name}); err != nil {
 				return err
 			}
 			wasSet = true
@@ -60,7 +60,7 @@ func (s *settings) handleField(field reflect.StructField, value reflect.Value, p
 	}
 
 	if !wasSet && value.IsZero() && metadata.Default != "" {
-		if err := s.setFieldValue(value, entry{key: field.Name, value: metadata.Default}); err != nil {
+		if err := s.setFieldValue(value, entry{key: field.Name, value: metadata.Default, fieldName: field.Name}); err != nil {
 			return &MalformedDefaultError{FieldName: field.Name, Default: metadata.Default, Err: err}
 		}
 	}
