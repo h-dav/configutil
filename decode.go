@@ -55,8 +55,20 @@ func setSliceField(field reflect.Value, e entry) error {
 			return err
 		}
 		field.Set(v)
+	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
+		v, err := splitUintSlice(e.fieldName, e.value, field.Type())
+		if err != nil {
+			return err
+		}
+		field.Set(v)
 	case reflect.Float32, reflect.Float64:
 		v, err := splitFloatSlice(e.fieldName, e.value, field.Type())
+		if err != nil {
+			return err
+		}
+		field.Set(v)
+	case reflect.Bool:
+		v, err := splitBoolSlice(e.fieldName, e.value, field.Type())
 		if err != nil {
 			return err
 		}
@@ -90,6 +102,20 @@ func splitIntSlice(fieldName, value string, sliceType reflect.Type) (reflect.Val
 	return result, nil
 }
 
+func splitUintSlice(fieldName, value string, sliceType reflect.Type) (reflect.Value, error) {
+	parts := strings.Split(value, ",")
+	result := reflect.MakeSlice(sliceType, len(parts), len(parts))
+	bits := sliceType.Elem().Bits()
+	for i, v := range parts {
+		n, err := strconv.ParseUint(strings.TrimSpace(v), 10, bits)
+		if err != nil {
+			return reflect.Value{}, &FieldConversionError{FieldName: fieldName, TargetType: sliceType.String(), Err: err}
+		}
+		result.Index(i).SetUint(n)
+	}
+	return result, nil
+}
+
 func splitFloatSlice(fieldName, value string, sliceType reflect.Type) (reflect.Value, error) {
 	parts := strings.Split(value, ",")
 	result := reflect.MakeSlice(sliceType, len(parts), len(parts))
@@ -100,6 +126,19 @@ func splitFloatSlice(fieldName, value string, sliceType reflect.Type) (reflect.V
 			return reflect.Value{}, &FieldConversionError{FieldName: fieldName, TargetType: sliceType.String(), Err: err}
 		}
 		result.Index(i).SetFloat(f)
+	}
+	return result, nil
+}
+
+func splitBoolSlice(fieldName, value string, sliceType reflect.Type) (reflect.Value, error) {
+	parts := strings.Split(value, ",")
+	result := reflect.MakeSlice(sliceType, len(parts), len(parts))
+	for i, v := range parts {
+		b, err := strconv.ParseBool(strings.TrimSpace(v))
+		if err != nil {
+			return reflect.Value{}, &FieldConversionError{FieldName: fieldName, TargetType: sliceType.String(), Err: err}
+		}
+		result.Index(i).SetBool(b)
 	}
 	return result, nil
 }
