@@ -11,10 +11,6 @@ import (
 	"github.com/h-dav/configutil"
 )
 
-// ---------------------------------------------------------------------------
-// Set — basic functionality
-// ---------------------------------------------------------------------------
-
 func TestSet(t *testing.T) {
 	t.Run("basic types", func(t *testing.T) {
 		type Config struct {
@@ -575,10 +571,6 @@ func TestSet(t *testing.T) {
 	})
 }
 
-// ---------------------------------------------------------------------------
-// Set — invalid config types
-// ---------------------------------------------------------------------------
-
 func TestSet_InvalidConfig(t *testing.T) {
 	t.Run("not a pointer", func(t *testing.T) {
 		type Config struct {
@@ -605,10 +597,6 @@ func TestSet_InvalidConfig(t *testing.T) {
 		}
 	})
 }
-
-// ---------------------------------------------------------------------------
-// WithFilepath
-// ---------------------------------------------------------------------------
 
 func TestSet_WithFilepath(t *testing.T) {
 	t.Run("loads values from env file", func(t *testing.T) {
@@ -698,10 +686,6 @@ func TestSet_WithFilepath(t *testing.T) {
 		}
 	})
 }
-
-// ---------------------------------------------------------------------------
-// Precedence: Default < File < Env < Flag
-// ---------------------------------------------------------------------------
 
 func TestPrecedence(t *testing.T) {
 	if flag.Lookup("PREC_FLAG") == nil {
@@ -811,6 +795,297 @@ func TestPrecedence(t *testing.T) {
 		}
 		if cfg.Server.Port != 9090 {
 			t.Errorf("got %d, want 9090", cfg.Server.Port)
+		}
+	})
+}
+
+func TestWithSummary(t *testing.T) {
+	t.Run("env source", func(t *testing.T) {
+		type Config struct {
+			MyValue string `config:"MYKEY"`
+		}
+
+		t.Setenv("MYKEY", "myval")
+
+		var cfg Config
+		var summary configutil.LoadSummary
+		if err := configutil.Set(&cfg, configutil.WithSummary(&summary)); err != nil {
+			t.Fatalf("Set() error = %v", err)
+		}
+
+		if len(summary.Entries) != 1 {
+			t.Fatalf("expected 1 entry, got %d", len(summary.Entries))
+		}
+
+		entry := summary.Entries[0]
+		if entry.FieldName != "MyValue" || entry.Key != "MYKEY" || entry.Value != "myval" || entry.Source != "env" {
+			t.Errorf("entry = %+v, want {FieldName: MyValue, Key: MYKEY, Value: myval, Source: env}", entry)
+		}
+	})
+
+	t.Run("file source", func(t *testing.T) {
+		type Config struct {
+			FileVal string `config:"FILE_KEY"`
+		}
+
+		tmpFile := t.TempDir() + "/test.env"
+		if err := os.WriteFile(tmpFile, []byte("FILE_KEY=file_value\n"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+
+		var cfg Config
+		var summary configutil.LoadSummary
+		if err := configutil.Set(&cfg, configutil.WithFilepath(tmpFile), configutil.WithSummary(&summary)); err != nil {
+			t.Fatalf("Set() error = %v", err)
+		}
+
+		if len(summary.Entries) != 1 {
+			t.Fatalf("expected 1 entry, got %d", len(summary.Entries))
+		}
+
+		entry := summary.Entries[0]
+		if entry.FieldName != "FileVal" || entry.Key != "FILE_KEY" || entry.Value != "file_value" || entry.Source != tmpFile {
+			t.Errorf("entry = %+v, want {FieldName: FileVal, Key: FILE_KEY, Value: file_value, Source: %s}", entry, tmpFile)
+		}
+	})
+
+	t.Run("default source", func(t *testing.T) {
+		type Config struct {
+			WithDefault string `config:"NONEXISTENT,default=fallback"`
+		}
+
+		var cfg Config
+		var summary configutil.LoadSummary
+		if err := configutil.Set(&cfg, configutil.WithSummary(&summary)); err != nil {
+			t.Fatalf("Set() error = %v", err)
+		}
+
+		if len(summary.Entries) != 1 {
+			t.Fatalf("expected 1 entry, got %d", len(summary.Entries))
+		}
+
+		entry := summary.Entries[0]
+		if entry.FieldName != "WithDefault" || entry.Key != "NONEXISTENT" || entry.Value != "fallback" || entry.Source != "default" {
+			t.Errorf("entry = %+v, want {FieldName: WithDefault, Key: NONEXISTENT, Value: fallback, Source: default}", entry)
+		}
+	})
+
+	t.Run("env overwrites file", func(t *testing.T) {
+		type Config struct {
+			Key string `config:"SHARED_KEY"`
+		}
+
+		tmpFile := t.TempDir() + "/test.env"
+		if err := os.WriteFile(tmpFile, []byte("SHARED_KEY=file_val\n"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+
+		t.Setenv("SHARED_KEY", "env_val")
+
+		var cfg Config
+		var summary configutil.LoadSummary
+		if err := configutil.Set(&cfg, configutil.WithFilepath(tmpFile), configutil.WithSummary(&summary)); err != nil {
+			t.Fatalf("Set() error = %v", err)
+		}
+
+		if len(summary.Entries) != 1 {
+			t.Fatalf("expected 1 entry, got %d", len(summary.Entries))
+		}
+
+		entry := summary.Entries[0]
+		if entry.Value != "env_val" || entry.Source != "env" {
+			t.Errorf("entry = %+v, want Value=env_val and Source=env", entry)
+		}
+	})
+
+	t.Run("flag source", func(t *testing.T) {
+		type Config struct {
+			Port int `config:"PORT"`
+		}
+
+		oldCommandLine := flag.CommandLine
+		flag.CommandLine = flag.NewFlagSet("test", flag.ContinueOnError)
+		defer func() { flag.CommandLine = oldCommandLine }()
+
+		flag.CommandLine.String("PORT", "8080", "")
+		flag.CommandLine.String("UNRELATED", "value", "")
+		_ = flag.CommandLine.Parse([]string{"-PORT=9000"})
+
+		var cfg Config
+		var summary configutil.LoadSummary
+		if err := configutil.Set(&cfg, configutil.WithSummary(&summary)); err != nil {
+			t.Fatalf("Set() error = %v", err)
+		}
+
+		if len(summary.Entries) != 1 {
+			t.Fatalf("expected 1 entry, got %d", len(summary.Entries))
+		}
+
+		entry := summary.Entries[0]
+		if entry.Key != "PORT" || entry.Value != "9000" || entry.Source != "flag" {
+			t.Errorf("entry = %+v, want Key=PORT, Value=9000, Source=flag", entry)
+		}
+	})
+
+	t.Run("field not set is absent", func(t *testing.T) {
+		type Config struct {
+			Set   string `config:"SET_KEY"`
+			Unset string `config:"UNSET_KEY"`
+		}
+
+		t.Setenv("SET_KEY", "value")
+
+		var cfg Config
+		var summary configutil.LoadSummary
+		if err := configutil.Set(&cfg, configutil.WithSummary(&summary)); err != nil {
+			t.Fatalf("Set() error = %v", err)
+		}
+
+		if len(summary.Entries) != 1 {
+			t.Fatalf("expected 1 entry (only Set), got %d", len(summary.Entries))
+		}
+
+		if summary.Entries[0].FieldName != "Set" {
+			t.Errorf("entry FieldName = %s, want Set", summary.Entries[0].FieldName)
+		}
+	})
+
+	t.Run("nested struct entries", func(t *testing.T) {
+		type Server struct {
+			Host string `config:"HOST"`
+			Port int    `config:"PORT"`
+		}
+
+		type Config struct {
+			Server Server `config:",prefix=SERVER_"`
+		}
+
+		t.Setenv("SERVER_HOST", "localhost")
+		t.Setenv("SERVER_PORT", "8080")
+
+		var cfg Config
+		var summary configutil.LoadSummary
+		if err := configutil.Set(&cfg, configutil.WithSummary(&summary)); err != nil {
+			t.Fatalf("Set() error = %v", err)
+		}
+
+		if len(summary.Entries) != 2 {
+			t.Fatalf("expected 2 entries, got %d", len(summary.Entries))
+		}
+
+		keys := []string{summary.Entries[0].Key, summary.Entries[1].Key}
+		if !slices.Contains(keys, "SERVER_HOST") || !slices.Contains(keys, "SERVER_PORT") {
+			t.Errorf("keys = %v, want [SERVER_HOST SERVER_PORT]", keys)
+		}
+	})
+
+	t.Run("multiple files attributed", func(t *testing.T) {
+		type Config struct {
+			FileA string `config:"KEY_A"`
+			FileB string `config:"KEY_B"`
+		}
+
+		tmpFileA := t.TempDir() + "/a.env"
+		tmpFileB := t.TempDir() + "/b.env"
+		if err := os.WriteFile(tmpFileA, []byte("KEY_A=value_a\n"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(tmpFileB, []byte("KEY_B=value_b\n"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+
+		var cfg Config
+		var summary configutil.LoadSummary
+		if err := configutil.Set(&cfg, configutil.WithFilepath(tmpFileA), configutil.WithFilepath(tmpFileB), configutil.WithSummary(&summary)); err != nil {
+			t.Fatalf("Set() error = %v", err)
+		}
+
+		if len(summary.Entries) != 2 {
+			t.Fatalf("expected 2 entries, got %d", len(summary.Entries))
+		}
+
+		sources := map[string]string{}
+		for _, entry := range summary.Entries {
+			sources[entry.Key] = entry.Source
+		}
+
+		if sources["KEY_A"] != tmpFileA || sources["KEY_B"] != tmpFileB {
+			t.Errorf("sources = %v, want KEY_A=%s and KEY_B=%s", sources, tmpFileA, tmpFileB)
+		}
+	})
+
+	t.Run("nil WithSummary is no-op", func(t *testing.T) {
+		type Config struct {
+			Value string `config:"VALUE"`
+		}
+
+		t.Setenv("VALUE", "test")
+
+		var cfg Config
+		if err := configutil.Set(&cfg, configutil.WithSummary(nil)); err != nil {
+			t.Fatalf("Set() error = %v", err)
+		}
+
+		if cfg.Value != "test" {
+			t.Errorf("cfg.Value = %s, want test", cfg.Value)
+		}
+	})
+
+	t.Run("variable substitution", func(t *testing.T) {
+		type Config struct {
+			URL  string `config:"URL"`
+			Host string `config:"HOST"`
+		}
+
+		t.Setenv("HOST", "example.com")
+		t.Setenv("URL", "http://${HOST}:8080")
+
+		var cfg Config
+		var summary configutil.LoadSummary
+		if err := configutil.Set(&cfg, configutil.WithSummary(&summary)); err != nil {
+			t.Fatalf("Set() error = %v", err)
+		}
+
+		if len(summary.Entries) != 2 {
+			t.Fatalf("expected 2 entries, got %d", len(summary.Entries))
+		}
+
+		urlEntry := summary.Entries[0]
+		if urlEntry.Key != "URL" || urlEntry.Value != "http://example.com:8080" {
+			t.Errorf("URL entry = %+v, want Value=http://example.com:8080", urlEntry)
+		}
+	})
+
+	t.Run("multiple types", func(t *testing.T) {
+		type Config struct {
+			Str   string  `config:"STRING"`
+			Num   int     `config:"NUMBER"`
+			Float float64 `config:"FLOAT"`
+			Bool  bool    `config:"BOOLEAN"`
+		}
+
+		t.Setenv("STRING", "text")
+		t.Setenv("NUMBER", "42")
+		t.Setenv("FLOAT", "3.14")
+		t.Setenv("BOOLEAN", "true")
+
+		var cfg Config
+		var summary configutil.LoadSummary
+		if err := configutil.Set(&cfg, configutil.WithSummary(&summary)); err != nil {
+			t.Fatalf("Set() error = %v", err)
+		}
+
+		if len(summary.Entries) != 4 {
+			t.Fatalf("expected 4 entries, got %d", len(summary.Entries))
+		}
+
+		for _, entry := range summary.Entries {
+			if entry.Source != "env" {
+				t.Errorf("entry %s has Source=%s, want env", entry.Key, entry.Source)
+			}
+			if entry.Value == "" {
+				t.Errorf("entry %s has empty Value", entry.Key)
+			}
 		}
 	})
 }
