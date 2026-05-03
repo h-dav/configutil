@@ -2,6 +2,8 @@
 
 Package `configutil` populates a Go struct from config sources.
 
+[![Go Report Card](https://goreportcard.com/badge/github.com/h-dav/configutil)](https://goreportcard.com/report/github.com/h-dav/configutil)
+
 ## Installation
 
 ```bash
