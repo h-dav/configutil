@@ -31,6 +31,7 @@ if err := configutil.Set(&cfg); err != nil {
 | Option                         | Description                        |
 |--------------------------------|------------------------------------|
 | `WithFilepath("config.env")`   | Load values from a `.env` file.    |
+| `WithSummary(&summary)`        | Populate a `LoadSummary` with provenance info for each resolved field. |
 
 ### Struct Tags
 
@@ -70,6 +71,37 @@ type Config struct {
 }
 // Reads SERVER_PORT from sources.
 ```
+
+### Config Dump / Logging
+
+Use `WithSummary` to inspect what was loaded and from which source. This is invaluable for debugging configuration resolution issues.
+
+```go
+type Config struct {
+    Host string `config:"HOST,default=localhost"`
+    Port int    `config:"PORT"`
+}
+
+var cfg Config
+var summary configutil.LoadSummary
+
+if err := configutil.Set(&cfg, configutil.WithSummary(&summary)); err != nil {
+    log.Fatal(err)
+}
+
+for _, entry := range summary.Entries {
+    fmt.Printf("%s=%s (from %s)\n", entry.Key, entry.Value, entry.Source)
+}
+// Output:
+// HOST=localhost (from default)
+// PORT=8080 (from env)
+```
+
+Each `LoadEntry` in the summary contains:
+- `FieldName` — the Go struct field name
+- `Key` — the config key that was looked up
+- `Value` — the final resolved value (after `${VAR}` substitution)
+- `Source` — where the value came from (`"env"`, `"flag"`, a file path, or `"default"`)
 
 ## Precedence
 

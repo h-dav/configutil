@@ -11,6 +11,7 @@ import (
 // source provides configuration key-value pairs.
 type source interface {
 	Load() (map[string]string, error)
+	Name() string
 }
 
 // flagSource loads values from command-line flags.
@@ -28,6 +29,10 @@ func (flagSource) Load() (map[string]string, error) {
 	return m, nil
 }
 
+func (flagSource) Name() string {
+	return "flag"
+}
+
 // fileSource loads values from a .env file.
 type fileSource struct {
 	filepath string
@@ -38,6 +43,10 @@ func (s fileSource) Load() (map[string]string, error) {
 		return nil, &FileTypeValidationError{Filepath: s.filepath}
 	}
 	return parseEnvFile(s.filepath)
+}
+
+func (s fileSource) Name() string {
+	return s.filepath
 }
 
 // parseEnvFile reads a .env file and returns its key-value pairs.
@@ -109,4 +118,8 @@ func (environmentVariableSource) Load() (map[string]string, error) {
 		}
 	}
 	return m, nil
+}
+
+func (environmentVariableSource) Name() string {
+	return "env"
 }

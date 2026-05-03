@@ -56,12 +56,28 @@ func (s *settings) handleField(field reflect.StructField, value reflect.Value, p
 				return err
 			}
 			wasSet = true
+			if s.summary != nil {
+				s.summary.Entries = append(s.summary.Entries, LoadEntry{
+					FieldName: field.Name,
+					Key:       key,
+					Value:     resolved,
+					Source:    s.provenance[key],
+				})
+			}
 		}
 	}
 
 	if !wasSet && value.IsZero() && metadata.Default != "" {
-		if err := s.setFieldValue(value, entry{key: field.Name, value: metadata.Default, fieldName: field.Name}); err != nil {
+		if err := s.setFieldValue(value, entry{key: metadata.Name, value: metadata.Default, fieldName: field.Name}); err != nil {
 			return &MalformedDefaultError{FieldName: field.Name, Default: metadata.Default, Err: err}
+		}
+		if s.summary != nil {
+			s.summary.Entries = append(s.summary.Entries, LoadEntry{
+				FieldName: field.Name,
+				Key:       metadata.Name,
+				Value:     metadata.Default,
+				Source:    "default",
+			})
 		}
 	}
 
