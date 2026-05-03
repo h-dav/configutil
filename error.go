@@ -15,6 +15,7 @@ var (
 	ErrConversion    = errors.New("conversion error")
 	ErrReplacement   = errors.New("replacement error")
 	ErrTag           = errors.New("tag error")
+	ErrSyntax        = errors.New("invalid syntax")
 )
 
 // FileTypeValidationError occurs when the .env config file fails to open.
@@ -30,11 +31,12 @@ func (e *FileTypeValidationError) Unwrap() error { return ErrFile }
 
 // OpenFileError occurs when the .env config file fails to open.
 type OpenFileError struct {
-	Err error
+	Filepath string
+	Err      error
 }
 
 func (e *OpenFileError) Error() string {
-	return fmt.Sprintf("failed to open config file: %v", e.Err)
+	return fmt.Sprintf("opening config file %q: %v", e.Filepath, e.Err)
 }
 
 func (e *OpenFileError) Unwrap() []error { return []error{e.Err, ErrFile} }
@@ -47,18 +49,19 @@ type FieldConversionError struct {
 }
 
 func (e *FieldConversionError) Error() string {
-	return fmt.Sprintf("failed to convert field %v to %v: %v", e.FieldName, e.TargetType, e.Err)
+	return fmt.Sprintf("failed to convert field %q to %v: %v", e.FieldName, e.TargetType, e.Err)
 }
 
 func (e *FieldConversionError) Unwrap() []error { return []error{e.Err, ErrConversion} }
 
 // UnsupportedFieldTypeError occurs when the a field type on the config struct is not compatible.
 type UnsupportedFieldTypeError struct {
+	FieldName string
 	FieldType string
 }
 
 func (e *UnsupportedFieldTypeError) Error() string {
-	return fmt.Sprintf("unsupported field type: %s", e.FieldType)
+	return fmt.Sprintf("unsupported field type %q: %s", e.FieldName, e.FieldType)
 }
 
 func (e *UnsupportedFieldTypeError) Unwrap() error { return ErrUnsupported }
@@ -80,7 +83,7 @@ type RequiredFieldError struct {
 }
 
 func (e *RequiredFieldError) Error() string {
-	return fmt.Sprintf("required field is not set in configuration: %v", e.FieldName)
+	return fmt.Sprintf("required field is not set in configuration: %q", e.FieldName)
 }
 
 func (e *RequiredFieldError) Unwrap() error { return ErrRequired }
@@ -101,9 +104,6 @@ type ParseError struct {
 	Line string
 	Err  error
 }
-
-// ErrSyntax indicates that a line is invalid syntax.
-var ErrSyntax = errors.New("invalid syntax")
 
 func (e *ParseError) Error() string {
 	return fmt.Sprintf("parse line: %v: %v", e.Line, e.Err)
@@ -136,27 +136,7 @@ func (e *MalformedTagError) Error() string {
 	return fmt.Sprintf("malformed tag %q", e.Tag)
 }
 
-func (e *MalformedTagError) Unwrap() []error {
-	if e.Err != nil {
-		return []error{e.Err, ErrTag}
-	}
-	return []error{ErrTag}
-}
-
-// FieldError wraps an error with the name of the field that caused it.
-type FieldError struct {
-	FieldName string
-	Err       error
-}
-
-func (e *FieldError) Error() string {
-	if e.FieldName != "" {
-		return fmt.Sprintf("field %q: %v", e.FieldName, e.Err)
-	}
-	return e.Err.Error()
-}
-
-func (e *FieldError) Unwrap() error { return e.Err }
+func (e *MalformedTagError) Unwrap() []error { return []error{e.Err, ErrTag} }
 
 // MalformedDefaultError occurs when the default value in a struct tag cannot be
 // parsed into the field's type. This is a developer error in the tag definition.
@@ -170,9 +150,4 @@ func (e *MalformedDefaultError) Error() string {
 	return fmt.Sprintf("default value %q is invalid for field %q: %v", e.Default, e.FieldName, e.Err)
 }
 
-func (e *MalformedDefaultError) Unwrap() []error {
-	if e.Err != nil {
-		return []error{e.Err, ErrTag}
-	}
-	return []error{ErrTag}
-}
+func (e *MalformedDefaultError) Unwrap() []error { return []error{e.Err, ErrTag} }

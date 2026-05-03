@@ -6,5 +6,5 @@ type settings struct {
 }
 
 type entry struct {
-	key, value string
+	key, value, fieldName string
 }

@@ -15,9 +15,9 @@ func TestErrorsIs(t *testing.T) {
 		target error
 	}{
 		{"FileTypeValidationError is ErrFile", &configutil.FileTypeValidationError{Filepath: "bad.txt"}, configutil.ErrFile},
-		{"OpenFileError is ErrFile", &configutil.OpenFileError{Err: fmt.Errorf("open failed")}, configutil.ErrFile},
+		{"OpenFileError is ErrFile", &configutil.OpenFileError{Filepath: "test.env", Err: fmt.Errorf("open failed")}, configutil.ErrFile},
 		{"FieldConversionError is ErrConversion", &configutil.FieldConversionError{FieldName: "Port", TargetType: "int", Err: fmt.Errorf("bad")}, configutil.ErrConversion},
-		{"UnsupportedFieldTypeError is ErrUnsupported", &configutil.UnsupportedFieldTypeError{FieldType: "complex128"}, configutil.ErrUnsupported},
+		{"UnsupportedFieldTypeError is ErrUnsupported", &configutil.UnsupportedFieldTypeError{FieldName: "X", FieldType: "complex128"}, configutil.ErrUnsupported},
 		{"InvalidConfigTypeError is ErrInvalidConfig", &configutil.InvalidConfigTypeError{ProvidedType: "string"}, configutil.ErrInvalidConfig},
 		{"RequiredFieldError is ErrRequired", &configutil.RequiredFieldError{FieldName: "Name"}, configutil.ErrRequired},
 		{"ReplacementError is ErrReplacement", &configutil.ReplacementError{VariableName: "HOST"}, configutil.ErrReplacement},
@@ -60,16 +60,15 @@ func TestErrorsUnwrap(t *testing.T) {
 	inner := fmt.Errorf("inner error")
 
 	tests := []struct {
-		name   string
-		err    error
-		inner  error
+		name  string
+		err   error
+		inner error
 	}{
 		{"OpenFileError", &configutil.OpenFileError{Err: inner}, inner},
 		{"FieldConversionError", &configutil.FieldConversionError{FieldName: "X", TargetType: "int", Err: inner}, inner},
 		{"ParseError", &configutil.ParseError{Line: "bad", Err: inner}, inner},
 		{"FileReadError", &configutil.FileReadError{Filepath: "x.env", Err: inner}, inner},
 		{"MalformedTagError", &configutil.MalformedTagError{Tag: "bad", Err: inner}, inner},
-		{"FieldError", &configutil.FieldError{FieldName: "X", Err: inner}, inner},
 		{"MalformedDefaultError", &configutil.MalformedDefaultError{FieldName: "X", Default: "bad", Err: inner}, inner},
 	}
 
@@ -92,7 +91,7 @@ func TestSentinelUnwrap(t *testing.T) {
 		{"InvalidConfigTypeError", &configutil.InvalidConfigTypeError{ProvidedType: "string"}, configutil.ErrInvalidConfig},
 		{"RequiredFieldError", &configutil.RequiredFieldError{FieldName: "Name"}, configutil.ErrRequired},
 		{"ReplacementError", &configutil.ReplacementError{VariableName: "HOST"}, configutil.ErrReplacement},
-		{"UnsupportedFieldTypeError", &configutil.UnsupportedFieldTypeError{FieldType: "chan int"}, configutil.ErrUnsupported},
+		{"UnsupportedFieldTypeError", &configutil.UnsupportedFieldTypeError{FieldName: "X", FieldType: "chan int"}, configutil.ErrUnsupported},
 	}
 
 	for _, tc := range tests {
@@ -108,12 +107,12 @@ func TestDualUnwrap(t *testing.T) {
 	inner := fmt.Errorf("inner error")
 
 	tests := []struct {
-		name    string
-		err     error
-		inner   error
+		name     string
+		err      error
+		inner    error
 		sentinel error
 	}{
-		{"OpenFileError", &configutil.OpenFileError{Err: inner}, inner, configutil.ErrFile},
+		{"OpenFileError", &configutil.OpenFileError{Filepath: "test.env", Err: inner}, inner, configutil.ErrFile},
 		{"FieldConversionError", &configutil.FieldConversionError{FieldName: "X", TargetType: "int", Err: inner}, inner, configutil.ErrConversion},
 		{"ParseError", &configutil.ParseError{Line: "bad", Err: inner}, inner, configutil.ErrParse},
 		{"FileReadError", &configutil.FileReadError{Filepath: "x.env", Err: inner}, inner, configutil.ErrFile},
@@ -133,24 +132,6 @@ func TestDualUnwrap(t *testing.T) {
 	}
 }
 
-func TestErrorsAs_ThroughFieldError(t *testing.T) {
-	inner := &configutil.RequiredFieldError{FieldName: "Name"}
-	wrapped := &configutil.FieldError{FieldName: "Name", Err: inner}
-
-	var target *configutil.RequiredFieldError
-	if !errors.As(wrapped, &target) {
-		t.Error("errors.As through FieldError failed to find RequiredFieldError")
-	}
-	if target.FieldName != "Name" {
-		t.Errorf("FieldName = %q, want %q", target.FieldName, "Name")
-	}
-
-	// FieldError wrapping RequiredFieldError should match ErrRequired via the chain.
-	if !errors.Is(wrapped, configutil.ErrRequired) {
-		t.Error("errors.Is(FieldError{RequiredFieldError}, ErrRequired) = false, want true")
-	}
-}
-
 func TestErrorMessages(t *testing.T) {
 	tests := []struct {
 		name string
@@ -158,17 +139,15 @@ func TestErrorMessages(t *testing.T) {
 		want string
 	}{
 		{"FileTypeValidationError", &configutil.FileTypeValidationError{Filepath: "bad.txt"}, `file extension is not a valid environment file: "bad.txt"`},
-		{"OpenFileError", &configutil.OpenFileError{Err: fmt.Errorf("no such file")}, "failed to open config file: no such file"},
-		{"UnsupportedFieldTypeError", &configutil.UnsupportedFieldTypeError{FieldType: "chan int"}, "unsupported field type: chan int"},
+		{"OpenFileError", &configutil.OpenFileError{Filepath: "no such file", Err: fmt.Errorf("no such file")}, `opening config file "no such file": no such file`},
+		{"UnsupportedFieldTypeError", &configutil.UnsupportedFieldTypeError{FieldName: "X", FieldType: "chan int"}, `unsupported field type "X": chan int`},
 		{"InvalidConfigTypeError", &configutil.InvalidConfigTypeError{ProvidedType: "test"}, "output must be a pointer to a struct, got string"},
-		{"RequiredFieldError", &configutil.RequiredFieldError{FieldName: "Name"}, "required field is not set in configuration: Name"},
+		{"RequiredFieldError", &configutil.RequiredFieldError{FieldName: "Name"}, `required field is not set in configuration: "Name"`},
 		{"ReplacementError", &configutil.ReplacementError{VariableName: "HOST"}, "configuration variable for replacement is not set: HOST"},
 		{"MalformedTagError with err", &configutil.MalformedTagError{Tag: "bad", Err: fmt.Errorf("reason")}, `malformed tag "bad": reason`},
 		{"MalformedTagError without err", &configutil.MalformedTagError{Tag: "bad"}, `malformed tag "bad"`},
-		{"FieldError with name", &configutil.FieldError{FieldName: "X", Err: fmt.Errorf("fail")}, `field "X": fail`},
-		{"FieldError without name", &configutil.FieldError{Err: fmt.Errorf("fail")}, "fail"},
 		{"MalformedDefaultError", &configutil.MalformedDefaultError{FieldName: "Port", Default: "abc", Err: fmt.Errorf("bad")}, `default value "abc" is invalid for field "Port": bad`},
-		{"FieldConversionError", &configutil.FieldConversionError{FieldName: "Port", TargetType: "int", Err: fmt.Errorf("bad")}, "failed to convert field Port to int: bad"},
+		{"FieldConversionError", &configutil.FieldConversionError{FieldName: "Port", TargetType: "int", Err: fmt.Errorf("bad")}, `failed to convert field "Port" to int: bad`},
 		{"ParseError", &configutil.ParseError{Line: "BADLINE", Err: configutil.ErrSyntax}, "parse line: BADLINE: invalid syntax"},
 		{"FileReadError", &configutil.FileReadError{Filepath: "x.env", Err: fmt.Errorf("read err")}, "reading x.env: read err"},
 	}
