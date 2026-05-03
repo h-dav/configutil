@@ -189,12 +189,16 @@ func TestSet(t *testing.T) {
 		type Config struct {
 			Strings []string  `config:"STRINGS"`
 			Ints    []int     `config:"INTS"`
+			Uints   []uint    `config:"UINTS"`
 			Floats  []float64 `config:"FLOATS"`
+			Bools   []bool    `config:"BOOLS"`
 		}
 
 		t.Setenv("STRINGS", "a,b,c")
 		t.Setenv("INTS", "1,2,3")
+		t.Setenv("UINTS", "1,2,3")
 		t.Setenv("FLOATS", "1.1,2.2")
+		t.Setenv("BOOLS", "true,false,true")
 
 		var cfg Config
 		if err := configutil.Set(&cfg); err != nil {
@@ -207,8 +211,14 @@ func TestSet(t *testing.T) {
 		if !slices.Equal(cfg.Ints, []int{1, 2, 3}) {
 			t.Errorf("Ints: got %v", cfg.Ints)
 		}
+		if !slices.Equal(cfg.Uints, []uint{1, 2, 3}) {
+			t.Errorf("Uints: got %v", cfg.Uints)
+		}
 		if !slices.Equal(cfg.Floats, []float64{1.1, 2.2}) {
 			t.Errorf("Floats: got %v", cfg.Floats)
+		}
+		if !slices.Equal(cfg.Bools, []bool{true, false, true}) {
+			t.Errorf("Bools: got %v", cfg.Bools)
 		}
 	})
 
@@ -414,6 +424,40 @@ func TestSet(t *testing.T) {
 		}
 	})
 
+	t.Run("conversion error uint slice", func(t *testing.T) {
+		type Config struct {
+			Nums []uint `config:"BAD_UINTS"`
+		}
+
+		t.Setenv("BAD_UINTS", "1,-2,3")
+
+		var cfg Config
+		err := configutil.Set(&cfg)
+		if err == nil {
+			t.Fatal("expected error")
+		}
+		if !errors.Is(err, configutil.ErrConversion) {
+			t.Errorf("got %v, want ErrConversion", err)
+		}
+	})
+
+	t.Run("conversion error bool slice", func(t *testing.T) {
+		type Config struct {
+			Flags []bool `config:"BAD_BOOLS"`
+		}
+
+		t.Setenv("BAD_BOOLS", "true,maybe,false")
+
+		var cfg Config
+		err := configutil.Set(&cfg)
+		if err == nil {
+			t.Fatal("expected error")
+		}
+		if !errors.Is(err, configutil.ErrConversion) {
+			t.Errorf("got %v, want ErrConversion", err)
+		}
+	})
+
 	t.Run("required field with explicit zero value is not an error", func(t *testing.T) {
 		type Config struct {
 			Flag bool `config:"REQ_BOOL_ZERO,required"`
@@ -559,10 +603,10 @@ func TestSet(t *testing.T) {
 
 	t.Run("unsupported slice element type", func(t *testing.T) {
 		type Config struct {
-			Flags []bool `config:"BOOL_SLICE"`
+			Chans []chan int `config:"CHAN_SLICE"`
 		}
 
-		t.Setenv("BOOL_SLICE", "true,false")
+		t.Setenv("CHAN_SLICE", "value")
 
 		var cfg Config
 		err := configutil.Set(&cfg)
